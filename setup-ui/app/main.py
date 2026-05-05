@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import urllib.parse
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -522,6 +523,7 @@ async def process_sync_response(session: aiohttp.ClientSession, sync_resp: dict)
     # Auto-accept invites from bridge bots into portal rooms.
     # Check that the bridge bot is already a joined member in the invite_state —
     # group portal invites may arrive from ghost/puppet users, not the bot itself.
+    newly_joined = False
     for room_id, invite_data in sync_resp.get("rooms", {}).get("invite", {}).items():
         events = invite_data.get("invite_state", {}).get("events", [])
         bot_in_room = any(
@@ -531,8 +533,15 @@ async def process_sync_response(session: aiohttp.ClientSession, sync_resp: dict)
             for e in events
         )
         if bot_in_room:
-            _, r = await mx(session, "POST", f"/join/{room_id}")
-            log.info("Auto-joined portal room %s (bridge bot present)", room_id)
+            encoded = urllib.parse.quote(room_id, safe="")
+            status, r = await mx(session, "POST", f"/join/{encoded}")
+            if status == 200:
+                log.info("Auto-joined portal room %s (bridge bot present)", room_id)
+                newly_joined = True
+            else:
+                log.warning("Failed to join portal room %s: %s %s", room_id, status, r)
+    if newly_joined:
+        _spawn(_refresh_rooms())
 
     for room_id, room_data in sync_resp.get("rooms", {}).get("join", {}).items():
         for event in room_data.get("timeline", {}).get("events", []):
@@ -678,8 +687,12 @@ async def sync_loop():
                 for e in events
             )
             if bot_in_room:
-                _, r = await mx(session, "POST", f"/join/{room_id}")
-                log.info("Joined pending portal room %s on startup", room_id)
+                encoded = urllib.parse.quote(room_id, safe="")
+                status, r = await mx(session, "POST", f"/join/{encoded}")
+                if status == 200:
+                    log.info("Joined pending portal room %s on startup", room_id)
+                else:
+                    log.warning("Failed to join portal room %s on startup: %s %s", room_id, status, r)
 
         _spawn(_initial_status_check())
 

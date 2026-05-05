@@ -173,7 +173,7 @@ services:
       SYNAPSE_ADMIN_USER: ${SYNAPSE_ADMIN_USER}
       SYNAPSE_ADMIN_PASSWORD: ${SYNAPSE_ADMIN_PASSWORD}
     ports:
-      - "127.0.0.1:8080:8080"
+      - "47538:8080"
     volumes:
       - relay-config:/data
       - ./setup-ui/app:/app   # live source mount — restart to pick up changes
