@@ -1,0 +1,21 @@
+# Secrets — never commit
+.env
+
+# Docker runtime data
+synapse/data/
+mautrix-whatsapp/data/
+mautrix-signal/data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*~

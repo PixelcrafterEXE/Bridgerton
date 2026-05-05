@@ -1,0 +1,198 @@
+services:
+
+  # ──────────────────────────────────────────────
+  # Databases
+  # ──────────────────────────────────────────────
+
+  postgres-synapse:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: ${SYNAPSE_DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres-synapse-data:/var/lib/postgresql/data
+    networks: [matrix]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-signal:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: signal
+      POSTGRES_USER: signal
+      POSTGRES_PASSWORD: ${SIGNAL_DB_PASSWORD}
+    volumes:
+      - postgres-signal-data:/var/lib/postgresql/data
+    networks: [matrix]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U signal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-whatsapp:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: whatsapp
+      POSTGRES_USER: whatsapp
+      POSTGRES_PASSWORD: ${WHATSAPP_DB_PASSWORD}
+    volumes:
+      - postgres-whatsapp-data:/var/lib/postgresql/data
+    networks: [matrix]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whatsapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ──────────────────────────────────────────────
+  # Setup: generates bridge registration YAMLs
+  # Must complete before Synapse starts.
+  # ──────────────────────────────────────────────
+
+  setup:
+    image: alpine:3.19
+    entrypoint: ["/bin/sh", "/setup.sh"]
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      WHATSAPP_AS_TOKEN: ${WHATSAPP_AS_TOKEN}
+      WHATSAPP_HS_TOKEN: ${WHATSAPP_HS_TOKEN}
+      SIGNAL_AS_TOKEN: ${SIGNAL_AS_TOKEN}
+      SIGNAL_HS_TOKEN: ${SIGNAL_HS_TOKEN}
+    volumes:
+      - bridge-registrations:/registrations
+      - ./setup/setup.sh:/setup.sh:ro
+    networks: [matrix]
+    restart: "no"
+
+  # ──────────────────────────────────────────────
+  # Matrix homeserver
+  # ──────────────────────────────────────────────
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      SYNAPSE_DB_PASSWORD: ${SYNAPSE_DB_PASSWORD}
+      SYNAPSE_REPORT_STATS: ${SYNAPSE_REPORT_STATS:-no}
+      SYNAPSE_REGISTRATION_SECRET: ${SYNAPSE_REGISTRATION_SECRET}
+      SYNAPSE_MACAROON_SECRET: ${SYNAPSE_MACAROON_SECRET}
+      SYNAPSE_FORM_SECRET: ${SYNAPSE_FORM_SECRET}
+      SYNAPSE_ADMIN_USER: ${SYNAPSE_ADMIN_USER}
+      SYNAPSE_ADMIN_PASSWORD: ${SYNAPSE_ADMIN_PASSWORD}
+    volumes:
+      - synapse-data:/data
+      - bridge-registrations:/registrations:ro
+      - ./synapse/entrypoint.sh:/entrypoint.sh:ro
+      - ./synapse/homeserver.yaml.tpl:/homeserver.yaml.tpl:ro
+      - ./synapse/log.config.tpl:/log.config.tpl:ro
+    # No external ports — Synapse is internal bridge infrastructure only.
+    # Bridges reach it at http://synapse:8008 inside the Docker network.
+    networks: [matrix]
+    depends_on:
+      postgres-synapse:
+        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsSL http://localhost:8008/_matrix/client/versions || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # ──────────────────────────────────────────────
+  # WhatsApp bridge
+  # ──────────────────────────────────────────────
+
+  mautrix-whatsapp:
+    image: dock.mau.dev/mautrix/whatsapp:latest
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      WHATSAPP_DB_PASSWORD: ${WHATSAPP_DB_PASSWORD}
+      WHATSAPP_AS_TOKEN: ${WHATSAPP_AS_TOKEN}
+      WHATSAPP_HS_TOKEN: ${WHATSAPP_HS_TOKEN}
+      WHATSAPP_ADMIN_USER: "@${SYNAPSE_ADMIN_USER}:${MATRIX_SERVER_NAME}"
+    volumes:
+      - whatsapp-data:/data
+      - ./mautrix-whatsapp/entrypoint.sh:/entrypoint.sh:ro
+    networks: [matrix]
+    depends_on:
+      postgres-whatsapp:
+        condition: service_healthy
+      synapse:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Signal bridge
+  # ──────────────────────────────────────────────
+
+  mautrix-signal:
+    image: dock.mau.dev/mautrix/signal:latest
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      SIGNAL_DB_PASSWORD: ${SIGNAL_DB_PASSWORD}
+      SIGNAL_AS_TOKEN: ${SIGNAL_AS_TOKEN}
+      SIGNAL_HS_TOKEN: ${SIGNAL_HS_TOKEN}
+      SIGNAL_ADMIN_USER: "@${SYNAPSE_ADMIN_USER}:${MATRIX_SERVER_NAME}"
+    volumes:
+      - signal-data:/data
+      - ./mautrix-signal/entrypoint.sh:/entrypoint.sh:ro
+    networks: [matrix]
+    depends_on:
+      postgres-signal:
+        condition: service_healthy
+      synapse:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Setup UI + relay bot
+  # ──────────────────────────────────────────────
+
+  setup-ui:
+    build:
+      context: ./setup-ui
+      network: host   # needed on hosts where Docker's default bridge has no DNS
+    environment:
+      MATRIX_SERVER_URL: http://synapse:8008
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      SYNAPSE_ADMIN_USER: ${SYNAPSE_ADMIN_USER}
+      SYNAPSE_ADMIN_PASSWORD: ${SYNAPSE_ADMIN_PASSWORD}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - relay-config:/data
+      - ./setup-ui/app:/app   # live source mount — restart to pick up changes
+    networks: [matrix]
+    depends_on:
+      synapse:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-synapse-data:
+  postgres-signal-data:
+  postgres-whatsapp-data:
+  synapse-data:
+  whatsapp-data:
+  signal-data:
+  bridge-registrations:
+  relay-config:
+
+networks:
+  matrix:
+    driver: bridge

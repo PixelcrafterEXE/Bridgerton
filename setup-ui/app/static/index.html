@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bridgerton Setup</title>
+<style>
+:root {
+  --bg:      #0f1117;
+  --surface: #1a1d27;
+  --border:  #2a2d3e;
+  --text:    #e2e8f0;
+  --muted:   #64748b;
+  --green:   #22c55e;
+  --yellow:  #eab308;
+  --red:     #ef4444;
+  --blue:    #3b82f6;
+  --wa:      #25d366;
+  --sig:     #3e7efe;
+  --radius:  12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px; line-height: 1.6;
+  min-height: 100vh; padding: 32px 16px;
+}
+h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -.5px; }
+h2 { font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
+.subtitle { color: var(--muted); font-size: .875rem; }
+header { text-align: center; margin-bottom: 40px; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 860px; margin: 0 auto 32px; }
+@media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px;
+}
+.card-wa  { background: color-mix(in srgb, var(--wa)  20%, var(--surface)); }
+.card-sig { background: color-mix(in srgb, var(--sig) 20%, var(--surface)); }
+.card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.card-title { font-size: 1.1rem; font-weight: 600; }
+
+/* Status badge */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: .75rem; font-weight: 600; padding: 3px 10px;
+  border-radius: 999px; margin-left: auto;
+}
+.badge-unlinked  { background: color-mix(in srgb, var(--muted) 20%, transparent);  color: var(--muted); }
+.badge-waiting   { background: color-mix(in srgb, var(--yellow) 20%, transparent); color: var(--yellow); }
+.badge-qr_ready  { background: color-mix(in srgb, var(--yellow) 20%, transparent); color: var(--yellow); }
+.badge-linked    { background: color-mix(in srgb, var(--green) 20%, transparent);  color: var(--green); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* Button */
+.btn {
+  display: inline-block; cursor: pointer; border: none;
+  border-radius: 8px; padding: 10px 18px;
+  font-size: .875rem; font-weight: 600;
+  transition: opacity .15s, transform .1s;
+}
+.btn:hover { opacity: .85; }
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.btn-wa  { background: var(--wa);  color: #000; }
+.btn-sig { background: var(--sig); color: #fff; }
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: .8rem; padding: 6px 12px;
+}
+.btn-sm { padding: 6px 12px; font-size: .8rem; }
+
+/* QR area */
+.qr-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 12px; margin-top: 16px;
+}
+.qr-wrap img {
+  width: 220px; height: 220px; border-radius: 8px;
+  image-rendering: pixelated;
+}
+.qr-hint { font-size: .8rem; color: var(--muted); text-align: center; }
+
+/* User info */
+.user-info {
+  margin-top: 14px; padding: 10px 14px;
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+  border-radius: 8px; font-size: .875rem; color: var(--green);
+}
+
+/* Relay section */
+.relay-section { max-width: 860px; margin: 0 auto; }
+.relay-columns { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start; margin-bottom: 20px; }
+@media (max-width: 640px) {
+  .relay-columns { grid-template-columns: 1fr; }
+  .relay-arrow { display: none; }
+}
+.relay-arrow { display: flex; align-items: center; justify-content: center; padding-top: 32px; color: var(--muted); font-size: 1.5rem; }
+
+.room-list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; }
+.room-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  border: 1.5px solid transparent;
+  background: var(--bg); font-size: .875rem;
+  transition: border-color .15s, background .15s;
+}
+.room-item:hover  { background: var(--border); }
+.room-item.selected { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+
+.relay-actions { display: flex; justify-content: center; margin-bottom: 24px; }
+
+/* Relay mappings table */
+.relay-list { display: flex; flex-direction: column; gap: 8px; }
+.relay-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-size: .875rem;
+}
+.relay-row .name { flex: 1; font-weight: 500; }
+.relay-row .rooms { flex: 2; color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Misc */
+.section-title { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; }
+.empty { text-align: center; color: var(--muted); padding: 24px; font-size: .875rem; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.connection-bar {
+  max-width: 860px; margin: 0 auto 24px;
+  padding: 8px 14px; border-radius: 8px; font-size: .8rem;
+  display: flex; align-items: center; gap: 8px;
+}
+.connected    { background: color-mix(in srgb, var(--green) 12%, transparent); color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 30%, transparent); }
+.disconnected { background: color-mix(in srgb, var(--red)   12%, transparent); color: var(--red);   border: 1px solid color-mix(in srgb, var(--red)   30%, transparent); }
+
+.divider { max-width: 860px; margin: 32px auto; border: none; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bridgerton</h1>
+  <p class="subtitle">Signal ↔ WhatsApp bridge setup</p>
+</header>
+
+<div id="conn-bar" class="connection-bar disconnected">
+  <span class="spinner"></span> Connecting to Matrix…
+</div>
+
+<!-- Bridge cards: WhatsApp left, Signal right -->
+<div class="grid">
+
+  <div class="card card-wa">
+    <div class="card-header">
+      <span class="card-title">WhatsApp</span>
+      <span id="wa-badge" class="badge badge-unlinked"><span class="dot"></span>Unlinked</span>
+    </div>
+    <div id="wa-user" class="user-info" style="display:none"></div>
+    <div id="wa-qr-wrap" class="qr-wrap" style="display:none">
+      <img id="wa-qr-img" src="" alt="WhatsApp QR code">
+      <p class="qr-hint">Open WhatsApp → Settings → Linked Devices → Link a Device</p>
+      <button class="btn btn-ghost btn-sm" onclick="waLogin()">Refresh QR</button>
+    </div>
+    <div id="wa-actions" style="margin-top:16px">
+      <button id="wa-btn" class="btn btn-wa" onclick="waLogin()">Get QR code</button>
+    </div>
+  </div>
+
+  <div class="card card-sig">
+    <div class="card-header">
+      <span class="card-title">Signal</span>
+      <span id="sig-badge" class="badge badge-unlinked"><span class="dot"></span>Unlinked</span>
+    </div>
+    <div id="sig-user" class="user-info" style="display:none"></div>
+    <div id="sig-qr-wrap" class="qr-wrap" style="display:none">
+      <img id="sig-qr-img" src="" alt="Signal QR code">
+      <p class="qr-hint">Open Signal → Settings → Linked Devices → tap +</p>
+      <button class="btn btn-ghost btn-sm" onclick="sigLink()">Refresh link</button>
+    </div>
+    <div id="sig-actions" style="margin-top:16px">
+      <button id="sig-btn" class="btn btn-sig" onclick="sigLink()">Get link QR</button>
+    </div>
+  </div>
+
+</div>
+
+<hr class="divider">
+
+<!-- Relay mapping section — WhatsApp left, Signal right (matches card order) -->
+<div class="relay-section">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px">
+    <div>
+      <h2>Relay Mappings</h2>
+      <p class="subtitle">Messages in a mapped WhatsApp group are forwarded to the paired Signal group, and vice versa.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="refreshRooms()">Refresh groups</button>
+  </div>
+
+  <div class="relay-columns">
+    <div>
+      <p class="section-title">WhatsApp groups</p>
+      <div id="wa-rooms" class="room-list"><p class="empty">Link WhatsApp first</p></div>
+    </div>
+    <div class="relay-arrow">⟷</div>
+    <div>
+      <p class="section-title">Signal groups</p>
+      <div id="sig-rooms" class="room-list"><p class="empty">Link Signal first</p></div>
+    </div>
+  </div>
+
+  <div class="relay-actions">
+    <button id="add-relay-btn" class="btn btn-ghost" onclick="createRelay()" disabled>
+      + Map selected groups
+    </button>
+  </div>
+
+  <p class="section-title">Active relays</p>
+  <div id="relay-list" class="relay-list"><p class="empty">No relay mappings yet</p></div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+const S = {
+  wa:     { status: "unlinked" },
+  sig:    { status: "unlinked" },
+  rooms:  { whatsapp: [], signal: [] },
+  relays: [],
+  selWa:  null,
+  selSig: null,
+};
+
+// ── SSE connection ────────────────────────────────────────────────────────────
+function startSSE() {
+  const es = new EventSource("/api/events");
+  es.onopen    = () => setConnected(true);
+  es.onerror   = () => { setConnected(false); setTimeout(startSSE, 3000); es.close(); };
+  es.onmessage = e => {
+    try { handle(JSON.parse(e.data)); } catch(_) {}
+  };
+}
+
+function setConnected(ok) {
+  const bar = document.getElementById("conn-bar");
+  bar.className = "connection-bar " + (ok ? "connected" : "disconnected");
+  bar.innerHTML = ok
+    ? '<span>Connected to Matrix</span>'
+    : '<span class="spinner"></span> Reconnecting…';
+}
+
+function handle(ev) {
+  switch (ev.type) {
+    case "init":
+      applyWA(ev.whatsapp);
+      applySig(ev.signal);
+      applyRooms(ev.rooms);
+      applyRelays(ev.relays);
+      break;
+    case "wa_qr":
+      S.wa.status = "qr_ready";
+      showWaQR(ev.qr);
+      updateWaBadge();
+      break;
+    case "wa_linked":
+      S.wa.status = "linked";
+      S.wa.user   = ev.user;
+      updateWaBadge();
+      showWaLinked(ev.user);
+      break;
+    case "wa_error":
+      S.wa.status = "unlinked";
+      updateWaBadge();
+      hideWaQR();
+      break;
+    case "sig_qr":
+      S.sig.status = "qr_ready";
+      showSigQR(ev.qr);
+      updateSigBadge();
+      break;
+    case "sig_linked":
+      S.sig.status = "linked";
+      S.sig.user   = ev.user;
+      updateSigBadge();
+      showSigLinked(ev.user);
+      break;
+    case "sig_error":
+      S.sig.status = "unlinked";
+      updateSigBadge();
+      hideSigQR();
+      break;
+    case "rooms_updated":
+      applyRooms({ whatsapp: ev.whatsapp, signal: ev.signal });
+      break;
+    case "relays_updated":
+      applyRelays(ev.relays);
+      break;
+  }
+}
+
+// ── Apply initial state ───────────────────────────────────────────────────────
+function applyWA(wa) {
+  S.wa = { ...S.wa, ...wa };
+  updateWaBadge();
+  if (wa.qr)   showWaQR(wa.qr);
+  if (wa.user) showWaLinked(wa.user);
+}
+function applySig(sig) {
+  S.sig = { ...S.sig, ...sig };
+  updateSigBadge();
+  if (sig.qr)   showSigQR(sig.qr);
+  if (sig.user) showSigLinked(sig.user);
+}
+function applyRooms(rooms) {
+  S.rooms = rooms;
+  renderRooms();
+}
+function applyRelays(relays) {
+  S.relays = relays || [];
+  renderRelays();
+}
+
+// ── Badge helpers ────────────────────────────────────────────────────────────
+const BADGE_LABELS = {
+  unlinked: "Unlinked", waiting: "Waiting…", qr_ready: "Scan QR", linked: "Linked"
+};
+function setBadge(id, status) {
+  const el = document.getElementById(id);
+  el.className = `badge badge-${status}`;
+  el.innerHTML = `<span class="dot"></span>${BADGE_LABELS[status] || status}`;
+}
+function updateWaBadge()  { setBadge("wa-badge",  S.wa.status);  }
+function updateSigBadge() { setBadge("sig-badge", S.sig.status); }
+
+// ── WA UI helpers ─────────────────────────────────────────────────────────────
+function showWaQR(b64) {
+  document.getElementById("wa-qr-img").src  = "data:image/png;base64," + b64;
+  document.getElementById("wa-qr-wrap").style.display = "flex";
+  document.getElementById("wa-actions").style.display = "none";
+}
+function hideWaQR() {
+  document.getElementById("wa-qr-wrap").style.display = "none";
+  document.getElementById("wa-actions").style.display = "block";
+  document.getElementById("wa-btn").disabled = false;
+}
+function showWaLinked(user) {
+  const el = document.getElementById("wa-user");
+  el.textContent = user;
+  el.style.display = "block";
+  document.getElementById("wa-qr-wrap").style.display = "none";
+  document.getElementById("wa-actions").style.display = "none";
+}
+
+// ── Signal UI helpers ─────────────────────────────────────────────────────────
+function showSigQR(b64) {
+  document.getElementById("sig-qr-img").src  = "data:image/png;base64," + b64;
+  document.getElementById("sig-qr-wrap").style.display = "flex";
+  document.getElementById("sig-actions").style.display = "none";
+}
+function hideSigQR() {
+  document.getElementById("sig-qr-wrap").style.display = "none";
+  document.getElementById("sig-actions").style.display = "block";
+  document.getElementById("sig-btn").disabled = false;
+}
+function showSigLinked(user) {
+  const el = document.getElementById("sig-user");
+  el.textContent = user;
+  el.style.display = "block";
+  document.getElementById("sig-qr-wrap").style.display = "none";
+  document.getElementById("sig-actions").style.display = "none";
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+async function waLogin() {
+  document.getElementById("wa-btn").disabled = true;
+  await fetch("/api/whatsapp/login", { method: "POST" });
+}
+async function sigLink() {
+  document.getElementById("sig-btn").disabled = true;
+  await fetch("/api/signal/link", { method: "POST" });
+}
+async function refreshRooms() {
+  await fetch("/api/rooms/refresh", { method: "POST" });
+}
+
+// ── Room selection & relay ───────────────────────────────────────────────────
+function renderRooms() {
+  renderRoomList("wa-rooms",  S.rooms.whatsapp, "selWa");
+  renderRoomList("sig-rooms", S.rooms.signal,   "selSig");
+  checkAddBtn();
+}
+function renderRoomList(containerId, rooms, selKey) {
+  const el = document.getElementById(containerId);
+  if (!rooms || rooms.length === 0) {
+    el.innerHTML = `<p class="empty">No groups found — refresh after linking</p>`;
+    return;
+  }
+  el.innerHTML = rooms.map(r => `
+    <div class="room-item ${S[selKey] === r.room_id ? "selected" : ""}"
+         onclick="selectRoom('${selKey}','${r.room_id}')">
+      <span>${esc(r.name)}</span>
+    </div>`).join("");
+}
+function selectRoom(key, roomId) {
+  S[key] = (S[key] === roomId) ? null : roomId;
+  renderRooms();
+}
+function checkAddBtn() {
+  document.getElementById("add-relay-btn").disabled = !(S.selSig && S.selWa);
+}
+async function createRelay() {
+  if (!S.selSig || !S.selWa) return;
+  const waRoom  = S.rooms.whatsapp.find(r => r.room_id === S.selWa);
+  const sigRoom = S.rooms.signal.find(r => r.room_id === S.selSig);
+  const name    = `${waRoom?.name || S.selWa} ↔ ${sigRoom?.name || S.selSig}`;
+  await fetch("/api/relays", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ signal_room: S.selSig, whatsapp_room: S.selWa, name }),
+  });
+  S.selWa = null; S.selSig = null;
+  renderRooms();
+}
+async function deleteRelay(id) {
+  await fetch(`/api/relays/${id}`, { method: "DELETE" });
+}
+
+function renderRelays() {
+  const el = document.getElementById("relay-list");
+  if (!S.relays || S.relays.length === 0) {
+    el.innerHTML = `<p class="empty">No relay mappings yet</p>`;
+    return;
+  }
+  el.innerHTML = S.relays.map(r => {
+    const wa  = S.rooms.whatsapp.find(x => x.room_id === r.whatsapp_room);
+    const sig = S.rooms.signal.find(x => x.room_id === r.signal_room);
+    const waName  = wa?.name  || r.whatsapp_room;
+    const sigName = sig?.name || r.signal_room;
+    return `
+    <div class="relay-row">
+      <span class="name">${esc(waName)} ↔ ${esc(sigName)}</span>
+      <button class="btn btn-ghost btn-sm" onclick="deleteRelay('${r.id}')">Remove</button>
+    </div>`;
+  }).join("");
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+startSSE();
+</script>
+</body>
+</html>
