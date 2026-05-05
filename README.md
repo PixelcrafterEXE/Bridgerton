@@ -2,9 +2,9 @@
 
 A self-contained Docker Compose stack that bridges **Signal** and **WhatsApp** together through a private [Matrix](https://matrix.org/) homeserver using [mautrix](https://github.com/mautrix) bridges.
 
-```
-Signal ←──→ mautrix-signal ←──→ Synapse (Matrix) ←──→ mautrix-whatsapp ←──→ WhatsApp
-```
+
+Signal ←→ mautrix-signal ←→ Synapse (Matrix) ←→ mautrix-whatsapp ←→ WhatsApp
+
 
 Synapse runs purely internal. No ports are exposed and no user other than the Bridge is allowed.
 
