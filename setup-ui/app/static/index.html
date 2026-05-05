@@ -398,7 +398,15 @@ function renderRooms() {
 function renderRoomList(containerId, rooms, selKey) {
   const el = document.getElementById(containerId);
   if (!rooms || rooms.length === 0) {
-    el.innerHTML = `<p class="empty">No groups found — refresh after linking</p>`;
+    const isSig = containerId === "sig-rooms";
+    const sigLinked = S.signal && S.signal.status === "linked";
+    if (isSig && sigLinked) {
+      el.innerHTML = `<p class="empty">No Signal groups yet.<br>
+        <strong>Signal creates group rooms lazily:</strong> send any message in your Signal test group from your phone and the group will appear here automatically within seconds.<br>
+        Then hit <em>Refresh groups</em>.</p>`;
+    } else {
+      el.innerHTML = `<p class="empty">No groups found — refresh after linking</p>`;
+    }
     return;
   }
   el.innerHTML = rooms.map(r => `

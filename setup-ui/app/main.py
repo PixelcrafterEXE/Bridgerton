@@ -332,6 +332,7 @@ async def handle_bot_dm(session: aiohttp.ClientSession, room_id: str, sender: st
                 _sse_push({"type": "wa_linked", "user": body})
                 log.info("WhatsApp linked: %s", body)
                 _spawn(_refresh_rooms())
+                _spawn(_sync_whatsapp_portals(session))
             elif any(k in low for k in ("error", "failed", "cancel", "timed out", "timeout")):
                 wa.update(status="unlinked", qr=None)
                 _sse_push({"type": "wa_error", "msg": body})
@@ -518,14 +519,20 @@ async def process_sync_response(session: aiohttp.ClientSession, sync_resp: dict)
                     {r["whatsapp_room"] for r in load_relays()}
     dm_rooms = {st["whatsapp"]["dm_room"], st["signal"]["dm_room"]} - {None}
 
-    # Auto-accept invites from bridge bots into portal rooms
+    # Auto-accept invites from bridge bots into portal rooms.
+    # Check that the bridge bot is already a joined member in the invite_state —
+    # group portal invites may arrive from ghost/puppet users, not the bot itself.
     for room_id, invite_data in sync_resp.get("rooms", {}).get("invite", {}).items():
         events = invite_data.get("invite_state", {}).get("events", [])
-        inviters = {e.get("sender") for e in events if e.get("type") == "m.room.member"
-                    and e.get("content", {}).get("membership") == "invite"}
-        if WA_BOT in inviters or SIG_BOT in inviters:
+        bot_in_room = any(
+            e.get("type") == "m.room.member"
+            and e.get("state_key") in (WA_BOT, SIG_BOT)
+            and e.get("content", {}).get("membership") == "join"
+            for e in events
+        )
+        if bot_in_room:
             _, r = await mx(session, "POST", f"/join/{room_id}")
-            log.info("Auto-joined portal room %s (invited by bridge bot)", room_id)
+            log.info("Auto-joined portal room %s (bridge bot present)", room_id)
 
     for room_id, room_data in sync_resp.get("rooms", {}).get("join", {}).items():
         for event in room_data.get("timeline", {}).get("events", []):
@@ -610,14 +617,26 @@ async def _refresh_rooms():
                  len(wa_rooms), len(sig_rooms))
 
 
-async def _sync_signal_portals(session: aiohttp.ClientSession):
-    """Send !signal sync after a short delay to auto-create portals for all Signal groups."""
+async def _sync_whatsapp_portals(session: aiohttp.ClientSession):
+    """Send !wa sync groups to create portals for all WhatsApp groups."""
     await asyncio.sleep(5)
-    room = st["signal"]["dm_room"]
+    room = st["whatsapp"]["dm_room"]
     if not room:
         return
-    await send_text(session, room, "!signal sync")
-    log.info("Sent '!signal sync' to auto-create Signal group portals")
+    await send_text(session, room, "!wa sync groups")
+    log.info("Sent '!wa sync groups' to auto-create WhatsApp group portals")
+    # Give the bridge time to create portals, then refresh the room list
+    await asyncio.sleep(15)
+    await _refresh_rooms()
+
+
+async def _sync_signal_portals(_session: aiohttp.ClientSession):
+    """The Signal megabridge creates group portals lazily (when the first message
+    arrives in a group). Poll periodically so rooms appear as soon as they do."""
+    for delay in (20, 40, 90, 180):
+        await asyncio.sleep(delay)
+        await _refresh_rooms()
+    log.info("Signal portal refresh polling complete")
 
 
 async def _initial_status_check(_ignored=None):
@@ -652,9 +671,13 @@ async def sync_loop():
         st["sync_token"] = resp.get("next_batch")
         for room_id, invite_data in resp.get("rooms", {}).get("invite", {}).items():
             events = invite_data.get("invite_state", {}).get("events", [])
-            inviters = {e.get("sender") for e in events if e.get("type") == "m.room.member"
-                        and e.get("content", {}).get("membership") == "invite"}
-            if WA_BOT in inviters or SIG_BOT in inviters:
+            bot_in_room = any(
+                e.get("type") == "m.room.member"
+                and e.get("state_key") in (WA_BOT, SIG_BOT)
+                and e.get("content", {}).get("membership") == "join"
+                for e in events
+            )
+            if bot_in_room:
                 _, r = await mx(session, "POST", f"/join/{room_id}")
                 log.info("Joined pending portal room %s on startup", room_id)
 
