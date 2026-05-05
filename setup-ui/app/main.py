@@ -289,11 +289,18 @@ async def get_or_create_dm(session: aiohttp.ClientSession, bot_mxid: str) -> str
 
 
 async def get_display_name(session: aiohttp.ClientSession, room_id: str, user_id: str) -> str:
+    # The WhatsApp bridge sets the global profile displayname to the WA profile name
+    # (the same name Signal renders as ~name). Use that as the primary source.
+    _, profile = await mx(session, "GET", f"/profile/{user_id}/displayname")
+    name = profile.get("displayname")
+    if name:
+        return name
+    # Fall back to room member state
     _, resp = await mx(session, "GET", f"/rooms/{room_id}/state/m.room.member/{user_id}")
     name = resp.get("displayname") or resp.get("display_name")
     if name:
         return name
-    # Fall back to user-local part
+    # Last resort: local part of MXID
     return user_id.split(":")[0].lstrip("@")
 
 
