@@ -39,11 +39,18 @@ WA_BOT        = f"@whatsappbot:{DOMAIN}"
 SIG_BOT       = f"@signalbot:{DOMAIN}"
 DATA_DIR      = Path(os.environ.get("DATA_DIR", "/data"))
 RELAY_FILE    = DATA_DIR / "relays.json"
+MIRROR_FILE   = DATA_DIR / "event_mirror.json"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
+
+def _load_mirror() -> dict:
+    try:
+        return json.loads(MIRROR_FILE.read_text())
+    except Exception:
+        return {}
 
 # ── Shared state (single process / single event loop) ────────────────────────
 
@@ -66,7 +73,7 @@ st: dict[str, Any] = {
     "rooms": {"whatsapp": [], "signal": []},
     "seen_events":  set(),   # avoid processing duplicates / echoes
     "relayed_ids":  set(),   # event IDs we sent (echo guard)
-    "event_mirror": {},      # source_event_id ↔ relay_event_id (bidirectional)
+    "event_mirror": _load_mirror(),  # source_event_id ↔ relay_event_id (bidirectional)
     # Relay sender context: (from_room_id, target_room_id) → last sender_mxid
     # Used to suppress repeated headers for the same consecutive sender.
     # Keyed by (from_room, target) so Signal "John" and WhatsApp "John" are
@@ -108,6 +115,19 @@ def load_relays() -> list:
 
 def save_relays(relays: list) -> None:
     RELAY_FILE.write_text(json.dumps(relays, indent=2))
+
+
+_MIRROR_CAP = 4_000  # keep last N bidirectional entries (= N/2 relayed messages)
+
+
+def _save_mirror(mirror: dict) -> None:
+    # Trim to cap before writing so the file stays bounded.
+    if len(mirror) > _MIRROR_CAP:
+        # Drop oldest half by discarding first entries (insertion-ordered dict).
+        keys = list(mirror)[len(mirror) - _MIRROR_CAP:]
+        mirror = {k: mirror[k] for k in keys}
+        st["event_mirror"] = mirror
+    MIRROR_FILE.write_text(json.dumps(mirror))
 
 
 # ── Matrix HTTP helpers ───────────────────────────────────────────────────────
@@ -185,6 +205,7 @@ async def send_event(session: aiohttp.ClientSession, room_id: str, event_type: s
         if source_event_id:
             st["event_mirror"][source_event_id] = event_id
             st["event_mirror"][event_id] = source_event_id
+            _save_mirror(st["event_mirror"])
     return event_id
 
 
