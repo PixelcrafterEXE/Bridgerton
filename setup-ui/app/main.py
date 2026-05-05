@@ -408,6 +408,22 @@ async def handle_bot_dm(session: aiohttp.ClientSession, room_id: str, sender: st
                 _sse_push({"type": "sig_error", "msg": body})
 
 
+def _strip_reply_fallback(body: str) -> str:
+    """Remove the '> quoted line\n\n' prefix Matrix clients put in reply bodies."""
+    lines = body.split("\n")
+    i = 0
+    while i < len(lines) and lines[i].startswith(">"):
+        i += 1
+    while i < len(lines) and lines[i].strip() == "":
+        i += 1
+    return "\n".join(lines[i:])
+
+
+def _strip_reply_fallback_html(html: str) -> str:
+    """Remove the <mx-reply>…</mx-reply> block Matrix clients embed in reply formatted_body."""
+    return re.sub(r"<mx-reply>.*?</mx-reply>\s*", "", html, flags=re.DOTALL)
+
+
 # msgtypes that forward directly as m.room.message
 RELAYABLE_MSG_TYPES = {"m.text", "m.image", "m.video", "m.audio", "m.file", "m.location"}
 
@@ -501,6 +517,12 @@ async def handle_relay(session: aiohttp.ClientSession, from_room: str, event: di
     relates    = content.get("m.relates_to", {})
     replied_to = relates.get("m.in_reply_to", {}).get("event_id")
     if replied_to:
+        # Strip the Matrix fallback quote so the downstream bridge doesn't see
+        # stale quoted text from the source room.
+        if "body" in fwd:
+            fwd["body"] = _strip_reply_fallback(fwd["body"])
+        if "formatted_body" in fwd:
+            fwd["formatted_body"] = _strip_reply_fallback_html(fwd["formatted_body"])
         mirror = st["event_mirror"].get(replied_to)
         if mirror:
             fwd["m.relates_to"] = {"m.in_reply_to": {"event_id": mirror}}
