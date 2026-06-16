@@ -356,6 +356,10 @@ async def handle_bot_dm(session: aiohttp.ClientSession, room_id: str, sender: st
             if "not logged in" in low or "you're not logged in" in low:
                 wa.update(status="unlinked")
                 _sse_push({"type": "wa_status", "status": "unlinked"})
+            elif "logged out" in low or "bad_credentials" in low:
+                wa.update(status="unlinked", qr=None)
+                _sse_push({"type": "wa_status", "status": "unlinked"})
+                log.info("WhatsApp logged out: %s", body)
             elif any(k in low for k in ("successfully logged in", "logged in as", "connected")):
                 wa.update(status="linked", user=body, qr=None)
                 _sse_push({"type": "wa_linked", "user": body})
@@ -393,6 +397,10 @@ async def handle_bot_dm(session: aiohttp.ClientSession, room_id: str, sender: st
             elif "not logged in" in low:
                 sig.update(status="unlinked")
                 _sse_push({"type": "sig_status", "status": "unlinked"})
+            elif "logged out" in low or "bad_credentials" in low:
+                sig.update(status="unlinked", qr=None, link_uri=None)
+                _sse_push({"type": "sig_status", "status": "unlinked"})
+                log.info("Signal logged out: %s", body)
             elif any(k in low for k in ("successfully logged in", "logged in as", "connected")):
                 sig.update(status="linked", user=body, qr=None, link_uri=None)
                 _sse_push({"type": "sig_linked", "user": body})
