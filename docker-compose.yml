@@ -98,6 +98,7 @@ services:
     # No external ports — Synapse is internal bridge infrastructure only.
     # Bridges reach it at http://synapse:8008 inside the Docker network.
     networks: [matrix]
+    dns: ["8.8.8.8", "8.8.4.4"]
     depends_on:
       postgres-synapse:
         condition: service_healthy
@@ -128,6 +129,7 @@ services:
       - whatsapp-data:/data
       - ./mautrix-whatsapp/entrypoint.sh:/entrypoint.sh:ro
     networks: [matrix]
+    dns: ["8.8.8.8", "8.8.4.4"]
     depends_on:
       postgres-whatsapp:
         condition: service_healthy
@@ -152,6 +154,7 @@ services:
       - signal-data:/data
       - ./mautrix-signal/entrypoint.sh:/entrypoint.sh:ro
     networks: [matrix]
+    dns: ["8.8.8.8", "8.8.4.4"]
     depends_on:
       postgres-signal:
         condition: service_healthy
@@ -178,6 +181,7 @@ services:
       - relay-config:/data
       - ./setup-ui/app:/app   # live source mount — restart to pick up changes
     networks: [matrix]
+    dns: ["8.8.8.8", "8.8.4.4"]
     depends_on:
       synapse:
         condition: service_healthy
